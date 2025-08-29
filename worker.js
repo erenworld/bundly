@@ -5,6 +5,28 @@ const fs = require("fs");
 
 exports.runTest = async function (testFile) {
   const code = await fs.promises.readFile(testFile, "utf8");
+  const testResult = {
+    success: false,
+    errorMessage: null,
+  };
 
-  return testFile + ":\n" + code;
+  try {
+    eval(code);
+    testResult.success = true;
+  } catch (err) {
+    testResult.errorMessage = err.message;
+  }
+  console.log(testFile + ":\n" + code);
+
+  return testResult;
 };
+
+// assertion framework
+const expect = (received) => ({
+  toBe: (expected) => {
+    if (received !== expected) {
+      throw new Error(`Expected ${expected} but received ${received}.`);
+    }
+    return true;
+  },
+});

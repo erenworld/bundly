@@ -2,11 +2,9 @@ import JestHasteMap from "jest-haste-map";
 import { cpus } from "os";
 import { dirname } from "path";
 import { fileURLToPath } from "url";
-import fs from "fs";
 import { Worker } from "jest-worker";
 import { join } from "path";
 
-// Get the root path to our project (Like `__dirname`).
 const root = dirname(fileURLToPath(import.meta.url));
 const hasteMapOptions = {
   extensions: ["js"],
