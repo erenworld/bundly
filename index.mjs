@@ -4,7 +4,7 @@ import { cpus, platform } from "os";
 import { dirname } from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
-import { runTest } from "./worker";
+import { runTest } from "./worker.mjs";
 
 // const testFiles = glob.sync("**/*.test.js");
 // console.log(testFiles); // ['tests/01.test.js', 'tests/02.test.js', …]

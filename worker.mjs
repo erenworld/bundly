@@ -2,10 +2,9 @@
 // Node.js recently received support for which allows to parallelize work across
 // threads within the same process.
 
-const fs = require("fs");
+import fs from "fs";
 
-exports.runTest = async function (testFile) {
+export async function runTest(testFile) {
   const code = await fs.promises.readFile(testFile, "utf8");
-
-  return testFile + ':\n' + code;
-};
+  return testFile + ":\n" + code;
+}
