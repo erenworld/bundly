@@ -1,19 +1,17 @@
-import { glob } from "glob";
 import JestHasteMap from "jest-haste-map";
-import { cpus, platform } from "os";
+import { cpus } from "os";
 import { dirname } from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
-import { runTest } from "./worker.mjs";
+import { Worker } from "jest-worker";
+import { join } from "path";
 
-// const testFiles = glob.sync("**/*.test.js");
-// console.log(testFiles); // ['tests/01.test.js', 'tests/02.test.js', …]
-
+// Get the root path to our project (Like `__dirname`).
 const root = dirname(fileURLToPath(import.meta.url));
 const hasteMapOptions = {
   extensions: ["js"],
   maxWorkers: cpus().length,
-  name: "bundly",
+  name: "best-test-framework",
   platforms: [],
   rootDir: root,
   roots: [root],
@@ -21,17 +19,18 @@ const hasteMapOptions = {
 
 const hasteMap = new JestHasteMap(hasteMapOptions);
 await hasteMap.setupCachePath(hasteMapOptions);
-
-// Build and return an in-memory HasteFS ("Haste File System") instance.
 const { hasteFS } = await hasteMap.build();
-
 const testFiles = hasteFS.matchFilesWithGlob(["**/*.test.js"]);
 
-// ['/path/to/tests/01.test.js', '/path/to/tests/02.test.js', …]
-console.log(testFiles);
+const worker = new Worker(join(root, "worker.js"), {
+  enableWorkerThreads: true,
+});
 
 await Promise.all(
   Array.from(testFiles).map(async (testFile) => {
-    console.log(await runTest(testFile));
+    const testResult = await worker.runTest(testFile);
+    console.log(testResult);
   })
 );
+
+worker.end();
