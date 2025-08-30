@@ -7,6 +7,7 @@ import chalk from 'chalk';
 import yargs from 'yargs';
 import Resolver from 'jest-resolve';
 import { DependencyResolver } from 'jest-resolve-dependencies';
+import fs from 'fs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), 'product');
 
@@ -56,3 +57,17 @@ while (queue.length) {
 console.log(chalk.bold(`❯ Found ${chalk.blue(allFiles.size)} files`));
 console.log(Array.from(allFiles));
 // node index.mjs --entry-point product/entry-point.js
+
+
+// “Serialize” the bundle.
+// Serialization is the process of taking the dependency information and all 
+// code to turn it into a bundle that we can be run as a single file in a browser.
+console.log(chalk.bold(`❯ Serializing bundle`));
+const allCodes = [];
+await Promise.all(
+  Array.from(allFiles).map(async (file) => {
+    const code = await fs.promises.readFile(file, 'utf8');
+    allCodes.push(code);
+  })
+)
+console.log(allCode.join('\n'));
