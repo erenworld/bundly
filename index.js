@@ -34,6 +34,8 @@ if (!hasteFS.exists(entryPoint)) {
   );
 }
 
+console.log(chalk.bold(`❯ Found ${chalk.blue(allFiles.size)} files`));
+
 const resolver = new Resolver(moduleMap, {
   extensions: ['.js'],
   hasCoreModules: false,
@@ -41,33 +43,60 @@ const resolver = new Resolver(moduleMap, {
 });
 const dependencyResolver = new DependencyResolver(resolver, hasteFS);
 
-const allFiles = new Set();
+const seen = new Set();
+const modules = new Map();
 const queue = [entryPoint];
 
 while (queue.length) {
   const module = queue.shift();
 
-  if (allFiles.has(module)) {
+  if (seen.has(module)) {
     continue;
   }
-  allFiles.add(module);
+  seen.add(module);
   queue.push(...dependencyResolver.resolve(module));
+
+  // Resolve each dependency and store it based on their "name",
+  // that is the actual occurrence in code via `require('<name>');`.
+  const dependencyMap = new Map(
+    hasteFS
+      .getDependencies(module)
+      .map((dependencyName) => [
+        dependencyMap,
+        resolver.resolveModule(module, dependencyName)
+      ])
+  );
+  const code = fs.readFileSync(module, 'utf8');
+  // Extract the "module body", in our case everything after `module.exports =`;
+  const moduleBody = code.match(/module\.exports\s+=\s+(.*?);/)?.[1] || '';
+
+  const metadata = {
+    code: moduleBody || code,
+    dependencyMap,
+  };
+  modules.set(module, metadata);
+  queue.push(...dependencyMap.values());
 }
 
-console.log(chalk.bold(`❯ Found ${chalk.blue(allFiles.size)} files`));
-console.log(Array.from(allFiles));
-// node index.mjs --entry-point product/entry-point.js
-
+console.log(chalk.bold(`❯ Found ${chalk.blue(seen.size)} files`));
 
 // “Serialize” the bundle.
 // Serialization is the process of taking the dependency information and all 
 // code to turn it into a bundle that we can be run as a single file in a browser.
 console.log(chalk.bold(`❯ Serializing bundle`));
-const allCodes = [];
-await Promise.all(
-  Array.from(allFiles).map(async (file) => {
-    const code = await fs.promises.readFile(file, 'utf8');
-    allCodes.push(code);
-  })
-)
-console.log(allCode.join('\n'));
+// Go through each module (backwards, to process the entry-point last).
+for (const [module, metadata] of Array.from(modules).reverse()) {
+  let { code } = metadata;
+  for (const [dependencyName, dependencyPath] of metadata.dependencyMap) {
+    // Inline the module body of the dependency into the module that requires it.
+  code = code.replace(
+    new RegExp(
+      // Escape `.` and `/`.
+      `require\\(('|")${dependencyName.replace(/[\/.]/g, '\\$&')}\\1\\)`,
+    ),
+    modules.get(dependencyPath).code,
+  )};
+  metadata.code = code;
+}
+
+console.log(modules.get(entryPoint).code);
