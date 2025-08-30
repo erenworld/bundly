@@ -1,43 +1,34 @@
 import JestHasteMap from "jest-haste-map";
 import { cpus } from "os";
-import { dirname } from "path";
+import { dirname, join } from "path";
 import { fileURLToPath } from "url";
-import { Worker } from "jest-worker";
-import { join } from "path";
-import { relative } from "path";
+import { resolve } from "path";
 import chalk from "chalk";
+import yargs from "yargs";
 
-const root = dirname(fileURLToPath(import.meta.url));
+const root = join(dirname(fileURLToPath(import.meta.url)), "product");
+
 const hasteMapOptions = {
   extensions: ["js"],
   maxWorkers: cpus().length,
-  name: "best-test-framework",
+  name: "jest-bundler",
   platforms: [],
   rootDir: root,
   roots: [root],
 };
 
-const hasteMap = new JestHasteMap(hasteMapOptions);
+const hasteMap = new JestHasteMap.default(hasteMapOptions);
 await hasteMap.setupCachePath(hasteMapOptions);
-const { hasteFS } = await hasteMap.build();
-const testFiles = hasteFS.matchFilesWithGlob(["**/*.test.js"]);
+const { hasteFS, moduleMap } = await hasteMap.build();
+console.log(hasteFS.getAllFiles());
+// ['/path/to/product/apple.js', '/path/to/product/banana.js', …]
 
-const worker = new Worker(join(root, "worker.js"), {
-  enableWorkerThreads: true,
-});
+const options = yargs(process.argv).argv;
+const entryPoint = resolve(process.cwd(), options.entryPoint);
+if (!hasteFS.exists(entryPoint)) {
+  throw new Error(
+    "`--entry-point` does not exist. Please provide a path to a valid file."
+  );
+}
 
-await Promise.all(
-  Array.from(testFiles).map(async (testFile) => {
-    const { success, errorMessage } = await worker.runTest(testFile);
-    const status = success
-      ? chalk.green.inverse.bold(" PASS ")
-      : chalk.red.inverse.bold(" FAIL ");
-
-    console.log(status + " " + chalk.dim(relative(root, testFile)));
-    if (!success) {
-      console.log("  " + errorMessage);
-    }
-  })
-);
-
-worker.end();
+console.log(chalk.bold(`❯ Building ${chalk.blue(options.entryPoint)}`));
