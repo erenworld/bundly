@@ -34,8 +34,6 @@ if (!hasteFS.exists(entryPoint)) {
   );
 }
 
-console.log(chalk.bold(`❯ Found ${chalk.blue(allFiles.size)} files`));
-
 const resolver = new Resolver(moduleMap, {
   extensions: ['.js'],
   hasCoreModules: false,
@@ -46,6 +44,7 @@ const dependencyResolver = new DependencyResolver(resolver, hasteFS);
 const seen = new Set();
 const modules = new Map();
 const queue = [entryPoint];
+let id = 0;
 
 while (queue.length) {
   const module = queue.shift();
@@ -54,7 +53,6 @@ while (queue.length) {
     continue;
   }
   seen.add(module);
-  queue.push(...dependencyResolver.resolve(module));
 
   // Resolve each dependency and store it based on their "name",
   // that is the actual occurrence in code via `require('<name>');`.
@@ -62,41 +60,56 @@ while (queue.length) {
     hasteFS
       .getDependencies(module)
       .map((dependencyName) => [
-        dependencyMap,
-        resolver.resolveModule(module, dependencyName)
-      ])
+        dependencyName,
+        resolver.resolveModule(module, dependencyName),
+      ]),
   );
-  const code = fs.readFileSync(module, 'utf8');
-  // Extract the "module body", in our case everything after `module.exports =`;
-  const moduleBody = code.match(/module\.exports\s+=\s+(.*?);/)?.[1] || '';
 
+  const code = fs.readFileSync(module, 'utf8');
   const metadata = {
-    code: moduleBody || code,
+    id: id++,
+    code,
     dependencyMap,
   };
   modules.set(module, metadata);
-  queue.push(...dependencyMap.values());
+  queue.push(...dependencyMap.values()); // TODOS: filter here and handle undefined
 }
 
 console.log(chalk.bold(`❯ Found ${chalk.blue(seen.size)} files`));
 
-// “Serialize” the bundle.
-// Serialization is the process of taking the dependency information and all 
-// code to turn it into a bundle that we can be run as a single file in a browser.
 console.log(chalk.bold(`❯ Serializing bundle`));
-// Go through each module (backwards, to process the entry-point last).
+// Wrap modules with `define(<id>, function(module, exports, require) { <code> });`
+const wrapModule = (id, code) => 
+  `define(${id}, function(module, exports, require) {\n${code}})`;
+// The code for each module gets added to this array.
+const output = [];
 for (const [module, metadata] of Array.from(modules).reverse()) {
-  let { code } = metadata;
+  let { id, code } = metadata;
+  
   for (const [dependencyName, dependencyPath] of metadata.dependencyMap) {
-    // Inline the module body of the dependency into the module that requires it.
-  code = code.replace(
-    new RegExp(
-      // Escape `.` and `/`.
-      `require\\(('|")${dependencyName.replace(/[\/.]/g, '\\$&')}\\1\\)`,
-    ),
-    modules.get(dependencyPath).code,
-  )};
-  metadata.code = code;
-}
+    const dependency = modules.get(dependencyPath);
+    // Swap out the reference the required module with the generated
+    // module it. We use regex for simplicity. A real bundler would likely
+    // do an AST transform using Babel or similar.
+    // TODOS: implement AST from scratch and compare with Babel's AST
+    code = code.replace(
+      new RegExp(
+        `require\\(('|")${dependencyName.replace(/[\/.]/g, '\\$&')}\\1\\)`,
+      ),
+      `require(${dependency.id})`,
+    );
+  }
+  // Wrap the code and add it to our output array.
+  output.push(wrapModule(id, code));
+} 
 
-console.log(modules.get(entryPoint).code);
+// Add the `require`-runtime at the beginning of our bundle.
+output.unshift(fs.readFileSync('./require.js', 'utf-8'));
+// And require the entry point at the end of the bundle.
+output.push(['requireModule(0);']);
+// Write it to stdout.
+console.log(output.join('\n'));
+
+if (options.output) {
+  fs.writeFileSync(options.output, output.join('\n'), 'utf8');
+}
